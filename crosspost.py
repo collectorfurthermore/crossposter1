@@ -249,6 +249,7 @@ def run(x, bluesky, mastodon, state):
         state["x_user_id"] = uid
         save(state)
     incoming = x.new_posts(state.get("last_seen_id"))
+    LOG.info("Fetched %d new X post(s) after checkpoint %s", len(incoming), state.get("last_seen_id") or "(none)")
     if not state.get("initialized"):
         state["initialized"] = True
         state["last_seen_id"] = incoming[-1]["id"] if incoming else "0"
@@ -260,6 +261,8 @@ def run(x, bluesky, mastodon, state):
         if int(pid) <= int(state.get("last_seen_id") or "0"):
             continue
         if post["repost"] or post.get("quote") or (post["reply_user"] and str(post["reply_user"]) != str(uid)):
+            reason = "repost" if post["repost"] else "quote post" if post.get("quote") else "reply to another account"
+            LOG.info("Skipping X post %s (%s)", pid, reason)
             state["last_seen_id"] = pid
             save(state)
             continue
