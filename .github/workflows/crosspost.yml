@@ -34,6 +34,8 @@ jobs:
           cache: pip
       - name: Install requirements
         run: pip install -r requirements.txt
+      - name: Test crossposting behavior
+        run: python -m unittest discover -s tests -v
       - name: Crosspost newly published X posts
         run: python crosspost.py
         env:
