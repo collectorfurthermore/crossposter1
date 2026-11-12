@@ -55,19 +55,10 @@ def x_link(pid):
     return f"https://x.com/i/status/{pid}"
 
 
-def shorten(text, pid, limit, byte_limit=None):
+def fits_bluesky(text):
+    """Check Bluesky's 300-grapheme and 3000 UTF-8 byte limits."""
     import regex
-    parts = regex.findall(r"\X", text)
-    if len(parts) <= limit and (byte_limit is None or len(text.encode()) <= byte_limit):
-        return text
-    suffix = f"…\n\nFull post on X: {x_link(pid)}"
-    kept = ""
-    for part in parts:
-        candidate = kept + part + suffix
-        if len(regex.findall(r"\X", candidate)) > limit or (byte_limit and len(candidate.encode()) > byte_limit):
-            break
-        kept += part
-    return kept.rstrip() + suffix
+    return len(regex.findall(r"\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
 
 
 class X:
@@ -180,7 +171,9 @@ class Bluesky:
 
     def publish(self, post, parent=None):
         from atproto import models
-        text = shorten(post["text"], post["id"], 300, 3000)
+        text = post["text"]
+        if not fits_bluesky(text):
+            raise ValueError("Post exceeds Bluesky length limits")
         reply = None
         root = None
         if parent:
@@ -229,8 +222,7 @@ class Mastodon:
             r.close()
 
     def publish(self, post, parent=None):
-        limit = int(os.environ.get("MASTODON_MAX_CHARS", "500"))
-        data = [("status", shorten(post["text"], post["id"], limit)),
+        data = [("status", post["text"]),
                 ("visibility", "public")]
         if parent:
             data.append(("in_reply_to_id", str(parent["id"])))
@@ -263,6 +255,11 @@ def run(x, bluesky, mastodon, state):
         if post["repost"] or post.get("quote") or (post["reply_user"] and str(post["reply_user"]) != str(uid)):
             reason = "repost" if post["repost"] else "quote post" if post.get("quote") else "reply to another account"
             LOG.info("Skipping X post %s (%s)", pid, reason)
+            state["last_seen_id"] = pid
+            save(state)
+            continue
+        if not fits_bluesky(post["text"]):
+            LOG.info("Skipping X post %s (exceeds Bluesky 300-character/3000-byte limit)", pid)
             state["last_seen_id"] = pid
             save(state)
             continue
