@@ -2,8 +2,14 @@ name: Mirror X to Bluesky and Mastodon
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "crosspost.py"
+      - ".github/workflows/crosspost.yml"
   schedule:
-    - cron: "7,17,27,37,47,57 * * * *"
+    - cron: "3,13,23,33,43,53 * * * *"
 
 permissions:
   contents: write
