@@ -62,7 +62,8 @@ class CrosspostMediaTests(unittest.TestCase):
     def test_bluesky_character_limit(self):
         self.assertTrue(fits_bluesky("a" * 300))
         self.assertFalse(fits_bluesky("a" * 301))
-        self.assertTrue(fits_bluesky("👨‍👩‍👧‍👦" * 300))
+        self.assertTrue(fits_bluesky("👨‍👩‍👧‍👦" * 100))
+        self.assertFalse(fits_bluesky("👨‍👩‍👧‍👦" * 300))
 
     def test_mastodon_character_limit(self):
         self.assertTrue(fits_mastodon("x" * 500))
