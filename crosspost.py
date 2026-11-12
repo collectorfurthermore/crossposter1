@@ -58,19 +58,19 @@ def x_link(pid):
 def fits_bluesky(text):
     """Check Bluesky's 300-grapheme and 3000 UTF-8 byte limits."""
     import regex
-    return len(regex.findall(r"\\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
+    return len(regex.findall(r"\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
 
 
 def mastodon_text(text, pid, limit):
     """Preserve existing Mastodon truncation behavior for very long posts."""
     import regex
-    clusters = regex.findall(r"\\X", text)
+    clusters = regex.findall(r"\X", text)
     if len(clusters) <= limit:
         return text
-    suffix = f"…\\n\\nFull post on X: {x_link(pid)}"
+    suffix = f"…\n\nFull post on X: {x_link(pid)}"
     kept = ""
     for cluster in clusters:
-        if len(regex.findall(r"\\X", kept + cluster + suffix)) > limit:
+        if len(regex.findall(r"\X", kept + cluster + suffix)) > limit:
             break
         kept += cluster
     return kept.rstrip() + suffix
