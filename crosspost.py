@@ -58,7 +58,22 @@ def x_link(pid):
 def fits_bluesky(text):
     """Check Bluesky's 300-grapheme and 3000 UTF-8 byte limits."""
     import regex
-    return len(regex.findall(r"\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
+    return len(regex.findall(r"\\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
+
+
+def mastodon_text(text, pid, limit):
+    """Preserve existing Mastodon truncation behavior for very long posts."""
+    import regex
+    clusters = regex.findall(r"\\X", text)
+    if len(clusters) <= limit:
+        return text
+    suffix = f"…\\n\\nFull post on X: {x_link(pid)}"
+    kept = ""
+    for cluster in clusters:
+        if len(regex.findall(r"\\X", kept + cluster + suffix)) > limit:
+            break
+        kept += cluster
+    return kept.rstrip() + suffix
 
 
 class X:
@@ -222,7 +237,8 @@ class Mastodon:
             r.close()
 
     def publish(self, post, parent=None):
-        data = [("status", post["text"]),
+        limit = int(os.environ.get("MASTODON_MAX_CHARS", "500"))
+        data = [("status", mastodon_text(post["text"], post["id"], limit)),
                 ("visibility", "public")]
         if parent:
             data.append(("in_reply_to_id", str(parent["id"])))
@@ -258,22 +274,22 @@ def run(x, bluesky, mastodon, state):
             state["last_seen_id"] = pid
             save(state)
             continue
-        if not fits_bluesky(post["text"]):
-            LOG.info("Skipping X post %s (exceeds Bluesky 300-character/3000-byte limit)", pid)
-            state["last_seen_id"] = pid
-            save(state)
-            continue
         entry = state.setdefault("posts", {}).setdefault(pid, {})
         parent = state["posts"].get(post["parent"], {}) if post["parent"] else {}
         if "bluesky" not in entry:
-            entry["bluesky"] = bluesky.publish(post, parent.get("bluesky"))
+            if fits_bluesky(post["text"]):
+                entry["bluesky"] = bluesky.publish(post, parent.get("bluesky"))
+                LOG.info("Published X post %s on Bluesky", pid)
+            else:
+                entry["bluesky"] = {"skipped": "exceeds Bluesky length limit"}
+                LOG.info("Skipped X post %s on Bluesky (exceeds length limit); Mastodon remains eligible", pid)
             save(state)
         if "mastodon" not in entry:
             entry["mastodon"] = mastodon.publish(post, parent.get("mastodon"))
             save(state)
         state["last_seen_id"] = pid
         save(state)
-        LOG.info("Mirrored X post %s", pid)
+        LOG.info("Processed X post %s for crossposting", pid)
     if len(state["posts"]) > 2000:
         keep = sorted(state["posts"], key=int)[-2000:]
         state["posts"] = {p: state["posts"][p] for p in keep}
