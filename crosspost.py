@@ -113,9 +113,17 @@ class X:
                 for u in (note.get("entities") or p.get("entities") or {}).get("urls", []):
                     short = u.get("url", "")
                     target = u.get("unwound_url") or u.get("expanded_url") or short
-                    is_pic = u.get("display_url", "").startswith("pic.twitter.com/")
+                    display = u.get("display_url", "").lower()
+                    parsed = urlparse(target)
+                    is_native_media_link = (
+                        display.startswith(("pic.twitter.com/", "pic.x.com/"))
+                        or (
+                            parsed.hostname in ("x.com", "www.x.com", "twitter.com", "www.twitter.com")
+                            and re.search(r"/status/" + re.escape(str(p["id"])) + r"/(photo|video)/[0-9]+/?$", parsed.path, re.I)
+                        )
+                    )
                     if short:
-                        txt = txt.replace(short, "" if is_pic and (images or video) else target)
+                        txt = txt.replace(short, "" if is_native_media_link and (images or video) else target)
                 txt = txt.strip()
                 if video:
                     txt += f"\n\nVideo: {x_link(p['id'])}"
