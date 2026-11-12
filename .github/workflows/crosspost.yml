@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "crosspost.py"
+      - "tests/**"
       - ".github/workflows/crosspost.yml"
   schedule:
     - cron: "3,13,23,33,43,53 * * * *"
