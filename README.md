@@ -2,6 +2,8 @@
 
 Mirrors **new posts that you publish on X** to your Bluesky and Mastodon profiles. Scheduled every ten minutes using GitHub Actions. No Buffer needed.
 
+**Scheduling notice (November 2026):** GitHub's built-in scheduled runs have not reliably started for this new repository. We added an optional [Cloudflare Cron Trigger backup](cloudflare/README.md). It is **not yet deployed or activated**. Until that is configured, you can manually trigger the workflow; GitHub-native scheduling may still start, but do not rely on it. The last confirmed post successfully reached both platforms when the workflow did run.
+
 ## Setup
 
 1. Open **Settings → Secrets and variables → Actions → New repository secret**. Add:
