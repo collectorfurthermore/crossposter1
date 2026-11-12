@@ -1,6 +1,13 @@
+# Cloudflare Worker deployment configuration for the Newsground crossposter.
+# Deploy this directory with Wrangler, or mirror these settings in the Cloudflare dashboard.
+# Required encrypted runtime secret: GITHUB_ACTIONS_TOKEN
+# Set with: npx wrangler secret put GITHUB_ACTIONS_TOKEN
+# NEVER put the token's value in this file or your Git repository.
+
 name = "newsground-crossposter-trigger"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
+# Every 10 minutes at minutes 08, 18, 28, 38, 48, and 58 UTC.
 [triggers]
 crons = ["8,18,28,38,48,58 * * * *"]
