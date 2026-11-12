@@ -22,7 +22,7 @@ To temporarily pause all publishing, change `CROSSPOST_ENABLED` to `false` or de
 
 - Polls every ten minutes at :07, :17, :27, :37, :47, and :57 UTC, subject to GitHub scheduler delays.
 - Mirrors original posts, expanded URLs, up to four photos (with alt text when provided), and own-account threads.
-- Skips retweets and replies to other people. Videos/GIFs are linked back to X rather than uploaded.
+- Skips retweets/reposts, quote posts, and replies to other people. Videos/GIFs are linked back to X rather than uploaded.
 - Trims longer posts with an X link where necessary.
 - Records each X post's publishing status independently for Bluesky and Mastodon to reduce duplicate posts.
 - Does not synchronize existing/edited/deleted X posts.
