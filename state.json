@@ -1,6 +1,6 @@
 {
   "initialized": true,
-  "last_seen_id": "2120808940359524369",
+  "last_seen_id": "2120920808533242184",
   "posts": {
     "2120692205782552803": {
       "bluesky": {
@@ -70,6 +70,15 @@
       "mastodon": {
         "id": "117602763326622599",
         "url": "https://journa.host/@scottmstedman/117602763326622599"
+      }
+    },
+    "2120920808533242184": {
+      "bluesky": {
+        "skipped": "exceeds Bluesky length limit"
+      },
+      "mastodon": {
+        "id": "117604493212179218",
+        "url": "https://journa.host/@scottmstedman/117604493212179218"
       }
     }
   },
