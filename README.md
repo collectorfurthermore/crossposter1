@@ -26,7 +26,7 @@ To temporarily pause all publishing, change `CROSSPOST_ENABLED` to `false` or de
 - Mirrors original posts, expanded URLs, up to four photos (with alt text when provided), and own-account threads.
 - Skips retweets/reposts, quote posts, and replies to other people. Videos/GIFs are linked back to X rather than uploaded.
 - If a post exceeds Bluesky's 300-grapheme or 3000-byte text limit, skip **only Bluesky** and still send it to Mastodon. Do not truncate or add a 'Full post on X' footer on Bluesky.
-- Mastodon receives the same eligible X post independently; posts exceeding the configured Mastodon character limit are truncated with a link back to X.
+- Mastodon independently publishes posts of 500 characters or fewer exactly as written. Posts over 500 characters are skipped on Mastodon, with no truncation or X footer.
 - Records each X post's publishing status independently for Bluesky and Mastodon to reduce duplicate posts.
 - Does not synchronize existing/edited/deleted X posts.
 
