@@ -125,7 +125,8 @@ class X:
                     txt += f"\n\nVideo: {x_link(p['id'])}"
                 found.append({"id": str(p["id"]), "text": txt, "images": images,
                               "parent": parent, "reply_user": p.get("in_reply_to_user_id"),
-                              "repost": any(r["type"] == "retweeted" for r in refs)})
+                              "repost": any(r.get("type") == "retweeted" for r in refs),
+                              "quote": any(r.get("type") == "quoted" for r in refs)})
             if not after or after == "0":
                 break
             token = result.get("meta", {}).get("next_token")
@@ -258,7 +259,7 @@ def run(x, bluesky, mastodon, state):
         pid = post["id"]
         if int(pid) <= int(state.get("last_seen_id") or "0"):
             continue
-        if post["repost"] or (post["reply_user"] and str(post["reply_user"]) != str(uid)):
+        if post["repost"] or post.get("quote") or (post["reply_user"] and str(post["reply_user"]) != str(uid)):
             state["last_seen_id"] = pid
             save(state)
             continue
