@@ -61,19 +61,9 @@ def fits_bluesky(text):
     return len(regex.findall(r"\X", text)) <= 300 and len(text.encode("utf-8")) <= 3000
 
 
-def mastodon_text(text, pid, limit):
-    """Preserve existing Mastodon truncation behavior for very long posts."""
-    import regex
-    clusters = regex.findall(r"\X", text)
-    if len(clusters) <= limit:
-        return text
-    suffix = f"…\n\nFull post on X: {x_link(pid)}"
-    kept = ""
-    for cluster in clusters:
-        if len(regex.findall(r"\X", kept + cluster + suffix)) > limit:
-            break
-        kept += cluster
-    return kept.rstrip() + suffix
+def fits_mastodon(text):
+    """Skip posts longer than 500 characters; never truncate them."""
+    return len(text) <= 500
 
 
 class X:
@@ -237,8 +227,9 @@ class Mastodon:
             r.close()
 
     def publish(self, post, parent=None):
-        limit = int(os.environ.get("MASTODON_MAX_CHARS", "500"))
-        data = [("status", mastodon_text(post["text"], post["id"], limit)),
+        if not fits_mastodon(post["text"]):
+            raise ValueError("Post exceeds Mastodon's 500-character limit")
+        data = [("status", post["text"]),
                 ("visibility", "public")]
         if parent:
             data.append(("in_reply_to_id", str(parent["id"])))
@@ -285,7 +276,12 @@ def run(x, bluesky, mastodon, state):
                 LOG.info("Skipped X post %s on Bluesky (exceeds length limit); Mastodon remains eligible", pid)
             save(state)
         if "mastodon" not in entry:
-            entry["mastodon"] = mastodon.publish(post, parent.get("mastodon"))
+            if fits_mastodon(post["text"]):
+                entry["mastodon"] = mastodon.publish(post, parent.get("mastodon"))
+                LOG.info("Published X post %s on Mastodon", pid)
+            else:
+                entry["mastodon"] = {"skipped": "exceeds Mastodon 500-character limit"}
+                LOG.info("Skipped X post %s on Mastodon (over 500 characters)", pid)
             save(state)
         state["last_seen_id"] = pid
         save(state)
