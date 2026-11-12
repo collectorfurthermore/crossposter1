@@ -1,0 +1,59 @@
+name: Mirror X to Bluesky and Mastodon
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,17,27,37,47,57 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mirror-x-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    # Remain dormant until the user explicitly enables crossposting.
+    if: ${{ vars.CROSSPOST_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install requirements
+        run: pip install -r requirements.txt
+      - name: Crosspost newly published X posts
+        run: python crosspost.py
+        env:
+          X_USERNAME: ${{ secrets.X_USERNAME }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USER_ID: ${{ secrets.X_USER_ID }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          MASTODON_BASE_URL: ${{ secrets.MASTODON_BASE_URL }}
+          MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
+          MASTODON_MAX_CHARS: "500"
+      - name: Weekly activity checkpoint
+        if: always()
+        shell: bash
+        run: |
+          if [ "$(date -u +%u)" = "1" ]; then
+            date -u +'%G-W%V' > .github/schedule-heartbeat.txt
+          fi
+      - name: Persist posting checkpoint
+        if: always()
+        shell: bash
+        run: |
+          if ! git diff --quiet -- state.json .github/schedule-heartbeat.txt; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.json .github/schedule-heartbeat.txt
+            git commit -m "chore: checkpoint crossposter [skip ci]"
+            git push
+          fi
