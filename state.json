@@ -1,6 +1,6 @@
 {
   "initialized": true,
-  "last_seen_id": "2121372234942120013",
+  "last_seen_id": "2121380859924348941",
   "posts": {
     "2120692205782552803": {
       "bluesky": {
@@ -140,6 +140,20 @@
       "mastodon": {
         "id": "117611532430232404",
         "url": "https://journa.host/@scottmstedman/117611532430232404"
+      }
+    },
+    "2121380859924348941": {
+      "bluesky": {
+        "cid": "bafyreifsmiefv3dlzo2onacctrnfioqggfm27ocfoemrrywrffo5eby22a",
+        "root": {
+          "cid": "bafyreifsmiefv3dlzo2onacctrnfioqggfm27ocfoemrrywrffo5eby22a",
+          "uri": "at://did:plc:euyf4mz2nnshoyvsp2rr7hmn/app.bsky.feed.post/3n2a4o7edm62h"
+        },
+        "uri": "at://did:plc:euyf4mz2nnshoyvsp2rr7hmn/app.bsky.feed.post/3n2a4o7edm62h"
+      },
+      "mastodon": {
+        "id": "117611689541830239",
+        "url": "https://journa.host/@scottmstedman/117611689541830239"
       }
     }
   },
