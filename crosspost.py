@@ -178,9 +178,13 @@ def download_image(url):
 
 class Bluesky:
     def __init__(self, handle, password):
-        from atproto import Client
-        self.client = Client()
-        self.client.login(handle, password)
+        from atproto import Client, Request
+        from httpx import Timeout
+
+        # Login supplies the DID needed to publish; the profile lookup is unnecessary.
+        # The SDK's default five-second timeout made the profile lookup intermittent.
+        self.client = Client(request=Request(timeout=Timeout(20.0)))
+        self.client.login(handle, password, fetch_bsky_profile=False)
 
     def publish(self, post, parent=None):
         from atproto import models
@@ -205,6 +209,20 @@ class Bluesky:
             sent = self.client.send_post(text=text, reply_to=reply, facets=facets)
         return {"uri": sent.uri, "cid": sent.cid,
                 "root": root or {"uri": sent.uri, "cid": sent.cid}}
+
+
+class LazyBluesky:
+    """Avoid logging in unless a new post actually needs Bluesky."""
+
+    def __init__(self, handle, password):
+        self.handle = handle
+        self.password = password
+        self.publisher = None
+
+    def publish(self, post, parent=None):
+        if self.publisher is None:
+            self.publisher = Bluesky(self.handle, self.password)
+        return self.publisher.publish(post, parent)
 
 
 class Mastodon:
@@ -275,14 +293,7 @@ def run(x, bluesky, mastodon, state):
             continue
         entry = state.setdefault("posts", {}).setdefault(pid, {})
         parent = state["posts"].get(post["parent"], {}) if post["parent"] else {}
-        if "bluesky" not in entry:
-            if fits_bluesky(post["text"]):
-                entry["bluesky"] = bluesky.publish(post, parent.get("bluesky"))
-                LOG.info("Published X post %s on Bluesky", pid)
-            else:
-                entry["bluesky"] = {"skipped": "exceeds Bluesky length limit"}
-                LOG.info("Skipped X post %s on Bluesky (exceeds length limit); Mastodon remains eligible", pid)
-            save(state)
+        # Keep Mastodon independent when Bluesky login or publishing fails.
         if "mastodon" not in entry:
             if fits_mastodon(post["text"]):
                 entry["mastodon"] = mastodon.publish(post, parent.get("mastodon"))
@@ -290,6 +301,14 @@ def run(x, bluesky, mastodon, state):
             else:
                 entry["mastodon"] = {"skipped": "exceeds Mastodon 500-character limit"}
                 LOG.info("Skipped X post %s on Mastodon (over 500 characters)", pid)
+            save(state)
+        if "bluesky" not in entry:
+            if fits_bluesky(post["text"]):
+                entry["bluesky"] = bluesky.publish(post, parent.get("bluesky"))
+                LOG.info("Published X post %s on Bluesky", pid)
+            else:
+                entry["bluesky"] = {"skipped": "exceeds Bluesky length limit"}
+                LOG.info("Skipped X post %s on Bluesky (exceeds length limit); Mastodon remains eligible", pid)
             save(state)
         state["last_seen_id"] = pid
         save(state)
@@ -306,13 +325,13 @@ def main():
         x = X(required("X_USERNAME"), required("X_BEARER_TOKEN"),
               os.environ.get("X_USER_ID") or None)
         state = load()
-        bsky = Bluesky(required("BLUESKY_HANDLE"), required("BLUESKY_APP_PASSWORD"))
+        bsky = LazyBluesky(required("BLUESKY_HANDLE"), required("BLUESKY_APP_PASSWORD"))
         mast = Mastodon(required("MASTODON_BASE_URL"),
                         required("MASTODON_ACCESS_TOKEN"))
         run(x, bsky, mast, state)
         return 0
     except Exception as error:
-        LOG.error("Crossposting stopped: %s", error)
+        LOG.error("Crossposting stopped (%s): %s", type(error).__name__, str(error) or "no details provided")
         return 1
 
 

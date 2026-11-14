@@ -1,7 +1,9 @@
+import tempfile
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 
-from crosspost import X, fits_bluesky, fits_mastodon
+from crosspost import LazyBluesky, X, fits_bluesky, fits_mastodon, run
 
 
 class CrosspostMediaTests(unittest.TestCase):
@@ -68,6 +70,43 @@ class CrosspostMediaTests(unittest.TestCase):
     def test_mastodon_character_limit(self):
         self.assertTrue(fits_mastodon("x" * 500))
         self.assertFalse(fits_mastodon("x" * 501))
+
+
+class CrosspostPublishingTests(unittest.TestCase):
+    def test_no_bluesky_login_on_empty_feed(self):
+        x = Mock()
+        x.user_id.return_value = "77"
+        x.new_posts.return_value = []
+        state = {"initialized": True, "last_seen_id": "1", "x_user_id": "77", "posts": {}}
+        lazy = LazyBluesky("example.bsky.social", "unused")
+        with patch("crosspost.Bluesky") as publisher:
+            run(x, lazy, Mock(), state)
+        publisher.assert_not_called()
+
+    def test_mastodon_checkpoint_survives_bluesky_failure(self):
+        x = Mock()
+        x.user_id.return_value = "77"
+        x.new_posts.return_value = [{
+            "id": "2", "text": "A new original post", "images": [],
+            "parent": None, "reply_user": None, "repost": False, "quote": False,
+        }]
+        mastodon = Mock()
+        mastodon.publish.return_value = {"id": "mastodon-2"}
+        bluesky = Mock()
+        bluesky.publish.side_effect = RuntimeError("temporary Bluesky failure")
+        state = {"initialized": True, "last_seen_id": "1", "x_user_id": "77", "posts": {}}
+        with tempfile.TemporaryDirectory() as temp, patch("crosspost.STATE", Path(temp) / "state.json"):
+            with self.assertRaisesRegex(RuntimeError, "temporary Bluesky failure"):
+                run(x, bluesky, mastodon, state)
+            self.assertEqual(state["posts"]["2"]["mastodon"], {"id": "mastodon-2"})
+            self.assertNotIn("bluesky", state["posts"]["2"])
+            self.assertEqual(state["last_seen_id"], "1")
+            bluesky.publish.side_effect = None
+            bluesky.publish.return_value = {"uri": "at://posted", "cid": "new"}
+            run(x, bluesky, mastodon, state)
+            mastodon.publish.assert_called_once()
+            self.assertEqual(bluesky.publish.call_count, 2)
+            self.assertEqual(state["last_seen_id"], "2")
 
 
 if __name__ == "__main__":
