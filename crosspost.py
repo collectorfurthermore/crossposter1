@@ -181,10 +181,9 @@ class Bluesky:
         from atproto import Client, Request
         from httpx import Timeout
 
-        # Login supplies the DID needed to publish; the profile lookup is unnecessary.
-        # The SDK's default five-second timeout made the profile lookup intermittent.
+        # The SDK needs the profile DID for publishing. Allow slow profile lookups.
         self.client = Client(request=Request(timeout=Timeout(20.0)))
-        self.client.login(handle, password, fetch_bsky_profile=False)
+        self.client.login(handle, password)
 
     def publish(self, post, parent=None):
         from atproto import models
