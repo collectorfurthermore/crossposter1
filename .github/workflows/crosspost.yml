@@ -2,6 +2,12 @@ name: Mirror X to Bluesky and Mastodon
 
 on:
   workflow_dispatch:
+    inputs:
+      live_bluesky_test_confirmation:
+        description: "Optional: type PUBLISH_ONE_BLUESKY_TEST to publish one public Bluesky test post. Leave empty for dry run."
+        required: false
+        type: string
+        default: ""
   push:
     branches:
       - main
@@ -24,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     # Remain dormant until the user explicitly enables crossposting.
-    if: ${{ vars.CROSSPOST_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && vars.CROSSPOST_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,3 +72,54 @@ jobs:
             git commit -m "chore: checkpoint crossposter [skip ci]"
             git push
           fi
+
+  dry_run_selected_x_post:
+    name: Dry-run selected X post (no publishing)
+    if: ${{ github.ref == 'refs/heads/test/bluesky-link-unfurling' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+      - name: Check offline test suite
+        run: python -m unittest discover -s tests -v
+      - name: Dry-run one X post without publishing
+        run: PYTHONPATH=. python tests/dry_run_x_post.py 2124658483307933859
+        env:
+          X_USERNAME: ${{ secrets.X_USERNAME }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USER_ID: ${{ secrets.X_USER_ID }}
+
+  verify_one_bluesky_post:
+    name: Publish ONE test post to Bluesky (explicit opt-in only)
+    if: ${{ github.ref == 'refs/heads/test/bluesky-link-unfurling' && github.event_name == 'workflow_dispatch' && inputs.live_bluesky_test_confirmation == 'PUBLISH_ONE_BLUESKY_TEST' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run offline tests first
+        run: python -m unittest discover -s tests -v
+      - name: Publish one explicitly confirmed Bluesky test post
+        run: PYTHONPATH=.:tests python tests/live_verify_bluesky.py
+        env:
+          CONFIRM_SINGLE_POST: ${{ inputs.live_bluesky_test_confirmation }}
+          X_USERNAME: ${{ secrets.X_USERNAME }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USER_ID: ${{ secrets.X_USER_ID }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
