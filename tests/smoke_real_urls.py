@@ -8,7 +8,7 @@ from link_preview import preview_for
 
 
 URLS = [
-    "https://www.nytimes.com/2026/11/21/world/asia/china-nvidia-spy-chips-state-security.html",
+    "https://www.nytimes.com/",
     "https://thenewsground.com/",
 ]
 
