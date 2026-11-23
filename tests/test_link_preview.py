@@ -106,5 +106,63 @@ class PreviewTests(unittest.TestCase):
         self.assertLess(len(thumb), 1_000_000)
 
 
+    @patch("link_preview.cardyb_metadata")
+    @patch("link_preview.fetch_limited")
+    def test_cardyb_fills_blocked_nytimes_article(self, fetch, cardyb):
+        from requests import HTTPError
+        error = HTTPError("403 Forbidden")
+        fetch.side_effect = error
+        cardyb.return_value = {
+            "title": "The New York Times Article Headline",
+            "description": "Reporting from the article.",
+            "image": "",
+        }
+        url = "https://www.nytimes.com/2026/11/22/us/politics/alice-huang-china-spy-agency-nvidia.html"
+        with patch("link_preview.external_article_url", return_value=True):
+            card = preview_for(url)
+        self.assertEqual(card["uri"], url)
+        self.assertEqual(card["title"], "The New York Times Article Headline")
+        self.assertEqual(card["description"], "Reporting from the article.")
+        self.assertEqual(card["source"], "cardyb")
+
+    @patch("link_preview.cardyb_metadata")
+    @patch("link_preview.fetch_limited")
+    def test_cardyb_image_is_downloaded_and_compressed(self, fetch, cardyb):
+        from requests import HTTPError
+        fetch.side_effect = HTTPError("403")
+        cardyb.return_value = {
+            "title": "Article headline",
+            "description": "Article summary",
+            "image": "https://cardyb.bsky.app/v1/image?url=https%3A%2F%2Fexample.com%2Fcover.jpg",
+        }
+        with patch("link_preview.external_article_url", return_value=True), \
+             patch("link_preview.preview_thumbnail", return_value=b"\xff\xd8thumbnail") as image:
+            card = preview_for("https://www.nytimes.com/2026/11/22/us/example.html")
+        self.assertEqual(card["thumbnail"], b"\xff\xd8thumbnail")
+        image.assert_called_once_with(cardyb.return_value["image"])
+
+    @patch("link_preview.cardyb_metadata", side_effect=ValueError("unavailable"))
+    @patch("link_preview.fetch_limited")
+    def test_both_sources_failing_returns_safe_fallback_diagnostics(self, fetch, cardyb):
+        from requests import HTTPError
+        fetch.side_effect = HTTPError("403")
+        with patch("link_preview.external_article_url", return_value=True):
+            card = preview_for("https://www.nytimes.com/2026/11/22/us/example.html")
+        self.assertEqual(card["title"], "www.nytimes.com")
+        self.assertEqual(card["source"], "fallback")
+        self.assertIn("cardyb:ValueError", card["diagnostics"])
+
+    @patch("link_preview.fetch_limited")
+    def test_cardyb_metadata_parses_its_json_response(self, fetch):
+        from link_preview import cardyb_metadata
+        fetch.return_value = (b'{"error":"","title":"NYT report","description":"The summary","image":"https://cardyb.bsky.app/v1/image?url=abc"}', "https://cardyb.bsky.app/")
+        metadata = cardyb_metadata("https://www.nytimes.com/2026/11/22/us/example.html")
+        self.assertEqual(metadata["title"], "NYT report")
+        self.assertEqual(metadata["description"], "The summary")
+        self.assertEqual(metadata["image"], "https://cardyb.bsky.app/v1/image?url=abc")
+        self.assertIn("https%3A%2F%2Fwww.nytimes.com", fetch.call_args.args[0])
+
+
+
 if __name__ == "__main__":
     unittest.main()
