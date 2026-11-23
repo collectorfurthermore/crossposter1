@@ -9,7 +9,7 @@ import sys
 from urllib.parse import quote
 
 from crosspost import Bluesky, fits_bluesky
-from tests.dry_run_x_post import fetch_selected_post
+from dry_run_x_post import fetch_selected_post
 from link_preview import preview_for, external_article_url
 
 
