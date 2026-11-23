@@ -109,5 +109,77 @@ class CrosspostPublishingTests(unittest.TestCase):
             self.assertEqual(state["last_seen_id"], "2")
 
 
+
+class LinkCardIntegrationTests(unittest.TestCase):
+    def test_x_extraction_preserves_link_candidate(self):
+        article = "https://www.nytimes.com/2026/11/22/us/story.html"
+        response = {
+            "data": [{
+                "id": "123", "author_id": "77", "text": "Read https://t.co/abc",
+                "entities": {"urls": [{
+                    "url": "https://t.co/abc",
+                    "expanded_url": article,
+                    "display_url": "nytimes.com/..."
+                }]}
+            }],
+            "meta": {},
+        }
+        with patch("crosspost.api", return_value=response):
+            post = X("tester", "unused", uid="77").new_posts("1")[0]
+        self.assertEqual(post["links"], [article])
+        self.assertIn(article, post["text"])
+
+    @patch("link_preview.preview_for")
+    def test_bluesky_adds_article_card_without_changing_text(self, preview):
+        from crosspost import Bluesky
+        from atproto import models
+        article = "https://www.nytimes.com/2026/11/22/us/story.html"
+        preview.return_value = {
+            "uri": article, "title": "NYT investigation",
+            "description": "Details from the article", "thumbnail": None,
+        }
+        publisher = Bluesky.__new__(Bluesky)
+        publisher.client = Mock()
+        publisher.client.detect_facets.return_value = []
+        publisher.client.send_post.return_value = Mock(uri="at://post", cid="cid")
+        post = {"text": "Details: " + article, "links": [article], "images": []}
+        result = publisher.publish(post)
+        self.assertEqual(result["uri"], "at://post")
+        self.assertEqual(publisher.client.send_post.call_args.kwargs["text"], post["text"])
+        embed = publisher.client.send_post.call_args.kwargs["embed"]
+        self.assertIsInstance(embed, models.AppBskyEmbedExternal.Main)
+        self.assertEqual(embed.external.uri, article)
+        self.assertEqual(embed.external.title, "NYT investigation")
+        publisher.client.send_images.assert_not_called()
+
+    @patch("link_preview.preview_for")
+    def test_photo_post_keeps_photo_embed(self, preview):
+        from crosspost import Bluesky
+        publisher = Bluesky.__new__(Bluesky)
+        publisher.client = Mock()
+        publisher.client.detect_facets.return_value = []
+        publisher.client.send_images.return_value = Mock(uri="at://photo", cid="cid")
+        post = {
+            "text": "Original image post", "images": [{"url": "https://pbs.twimg.com/media/example.jpg", "alt": "Image"}],
+            "links": ["https://www.nytimes.com/2026/11/22/us/story.html"],
+        }
+        with patch("crosspost.download_image", return_value=b"test-photo"):
+            publisher.publish(post)
+        preview.assert_not_called()
+        publisher.client.send_images.assert_called_once()
+        publisher.client.send_post.assert_not_called()
+
+    @patch("link_preview.preview_for", return_value=None)
+    def test_plain_post_without_preview_stays_plain(self, preview):
+        from crosspost import Bluesky
+        publisher = Bluesky.__new__(Bluesky)
+        publisher.client = Mock()
+        publisher.client.detect_facets.return_value = []
+        publisher.client.send_post.return_value = Mock(uri="at://post", cid="cid")
+        publisher.publish({"text": "Just text", "links": [], "images": []})
+        self.assertIsNone(publisher.client.send_post.call_args.kwargs["embed"])
+        preview.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
