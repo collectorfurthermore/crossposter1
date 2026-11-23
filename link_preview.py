@@ -4,11 +4,12 @@ Only used for posts without attached photos. Never publishes or authenticates.
 """
 
 import ipaddress
+import json
 import re
 import socket
 from html.parser import HTMLParser
 from io import BytesIO
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -70,6 +71,8 @@ def fetch_limited(url, max_bytes, expected):
                 raise ValueError("Page is not HTML")
             if expected == "image" and mime and mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
                 raise ValueError("Preview is not a supported image")
+            if expected == "json" and mime and mime not in ("application/json", "application/problem+json"):
+                raise ValueError("Preview is not JSON")
             body = bytearray()
             for chunk in response.iter_content(65536):
                 body.extend(chunk)
@@ -132,29 +135,91 @@ def thumbnail_jpeg(image_data):
     raise ValueError("Preview thumbnail cannot fit")
 
 
-def preview_for(url):
-    """Return a link card payload, with optional thumbnail, or None for an unsafe URL.
 
-    Metadata and thumbnail failures do not prevent a minimal link card from being made.
+def cardyb_metadata(url):
+    """Ask the official Bluesky link-preview helper for public URL metadata.
+
+    This is only a fallback when the source page does not provide enough
+    metadata to this runner. It never uses Bluesky credentials.
+    """
+    service_url = "https://cardyb.bsky.app/v1/extract?url=" + quote(url, safe="")
+    body, _ = fetch_limited(service_url, MAX_HTML_BYTES, "json")
+    payload = json.loads(body.decode("utf-8", errors="replace"))
+    if not isinstance(payload, dict):
+        raise ValueError("CardyB returned an invalid response")
+    if payload.get("error"):
+        raise ValueError("CardyB reported a retrieval error")
+    return {
+        "title": str(payload.get("title") or "").strip(),
+        "description": str(payload.get("description") or "").strip(),
+        "image": str(payload.get("image") or "").strip(),
+    }
+
+
+def preview_thumbnail(url):
+    if not public_web_url(url):
+        raise ValueError("Unsafe preview thumbnail URL")
+    image_data, _ = fetch_limited(url, MAX_IMAGE_BYTES, "image")
+    return thumbnail_jpeg(image_data)
+
+
+def preview_for(url):
+    """Build a card using page metadata, then Bluesky's own extractor if needed.
+
+    Always use the original article URL as the card destination.
+    Report the metadata source and failures for dry-run diagnostics.
     """
     if not external_article_url(url):
         return None
-    title = urlsplit(url).hostname or url
+    hostname = urlsplit(url).hostname or url
+    title = hostname
     description = ""
     thumbnail = None
+    source = "fallback"
+    diagnostics = []
+
     try:
         body, final_url = fetch_limited(url, MAX_HTML_BYTES, "html")
         parser = MetadataParser()
         parser.feed(body.decode("utf-8", errors="replace"))
-        title = parser.first("og:title", "twitter:title") or " ".join(parser.title_parts).strip() or title
+        page_title = parser.first("og:title", "twitter:title") or " ".join(parser.title_parts).strip()
+        if page_title:
+            title = page_title
+            source = "site"
         description = parser.first("og:description", "twitter:description", "description")
         image_url = parser.first("og:image:secure_url", "og:image", "twitter:image")
         if image_url:
             try:
-                image_data, _ = fetch_limited(urljoin(final_url, image_url), MAX_IMAGE_BYTES, "image")
-                thumbnail = thumbnail_jpeg(image_data)
-            except (requests.RequestException, OSError, ValueError, UnidentifiedImageError):
-                pass
-    except (requests.RequestException, OSError, ValueError):
-        pass
-    return {"uri": url, "title": title[:300], "description": description[:1000], "thumbnail": thumbnail}
+                thumbnail = preview_thumbnail(urljoin(final_url, image_url))
+            except (requests.RequestException, OSError, ValueError, UnidentifiedImageError) as error:
+                diagnostics.append("site_image:" + type(error).__name__)
+    except (requests.RequestException, OSError, ValueError) as error:
+        diagnostics.append("site_html:" + type(error).__name__)
+        if isinstance(error, requests.HTTPError) and error.response is not None:
+            diagnostics.append("site_status:" + str(error.response.status_code))
+
+    if title == hostname or not description or thumbnail is None:
+        try:
+            cardyb = cardyb_metadata(url)
+            improved = False
+            if title == hostname and cardyb["title"] and cardyb["title"] != hostname:
+                title = cardyb["title"]
+                improved = True
+            if not description and cardyb["description"]:
+                description = cardyb["description"]
+                improved = True
+            if thumbnail is None and cardyb["image"]:
+                try:
+                    thumbnail = preview_thumbnail(cardyb["image"])
+                    improved = True
+                except (requests.RequestException, OSError, ValueError, UnidentifiedImageError) as error:
+                    diagnostics.append("cardyb_image:" + type(error).__name__)
+            if improved:
+                source = "cardyb" if source == "fallback" else "site+cardyb"
+        except (requests.RequestException, OSError, ValueError, json.JSONDecodeError) as error:
+            diagnostics.append("cardyb:" + type(error).__name__)
+
+    return {
+        "uri": url, "title": title[:300], "description": description[:1000],
+        "thumbnail": thumbnail, "source": source, "diagnostics": diagnostics,
+    }
