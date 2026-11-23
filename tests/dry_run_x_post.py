@@ -46,10 +46,8 @@ def summarize(post):
     return report
 
 
-def main():
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
-        raise SystemExit("Usage: python tests/dry_run_x_post.py <numeric X post ID>")
-    post_id = sys.argv[1]
+def fetch_selected_post(post_id):
+    """Fetch and normalize exactly one X post, without using the timeline."""
     username = required("X_USERNAME")
     token = required("X_BEARER_TOKEN")
     x = X(username, token, os.environ.get("X_USER_ID") or None)
@@ -78,9 +76,15 @@ def main():
         posts = x.new_posts(after="1")
     if len(posts) != 1:
         raise RuntimeError("Could not normalize the requested X post")
+    return posts[0]
 
+
+def main():
+    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
+        raise SystemExit("Usage: python tests/dry_run_x_post.py <numeric X post ID>")
+    post = fetch_selected_post(sys.argv[1])
     print("READ-ONLY DRY RUN. No posts sent. No checkpoints modified.")
-    print(json.dumps(summarize(posts[0]), indent=2, ensure_ascii=False))
+    print(json.dumps(summarize(post), indent=2, ensure_ascii=False))
     return 0
 
 
