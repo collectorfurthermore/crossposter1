@@ -27,3 +27,5 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Run offline tests only
         run: python -m unittest discover -s tests -v
+      - name: Inspect real-site preview metadata without publishing
+        run: python tests/smoke_real_urls.py
