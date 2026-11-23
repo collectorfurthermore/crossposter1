@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     # Remain dormant until the user explicitly enables crossposting.
-    if: ${{ vars.CROSSPOST_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && vars.CROSSPOST_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,3 +66,27 @@ jobs:
             git commit -m "chore: checkpoint crossposter [skip ci]"
             git push
           fi
+
+  dry_run_selected_x_post:
+    name: Dry-run selected X post (no publishing)
+    if: ${{ github.ref == 'refs/heads/test/bluesky-link-unfurling' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+      - name: Check offline test suite
+        run: python -m unittest discover -s tests -v
+      - name: Dry-run one X post without publishing
+        run: PYTHONPATH=. python tests/dry_run_x_post.py 2124658483307933859
+        env:
+          X_USERNAME: ${{ secrets.X_USERNAME }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USER_ID: ${{ secrets.X_USER_ID }}
