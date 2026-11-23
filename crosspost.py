@@ -110,9 +110,12 @@ class X:
                 parent = next((r["id"] for r in refs if r["type"] == "replied_to"), None)
                 note = p.get("note_tweet") or {}
                 txt = note.get("text") or p.get("text", "")
+                links = []
                 for u in (note.get("entities") or p.get("entities") or {}).get("urls", []):
                     short = u.get("url", "")
                     target = u.get("unwound_url") or u.get("expanded_url") or short
+                    if target.startswith(("https://", "http://")):
+                        links.append(target)
                     display = u.get("display_url", "").lower()
                     parsed = urlparse(target)
                     is_native_media_link = (
@@ -127,7 +130,7 @@ class X:
                 txt = txt.strip()
                 if video:
                     txt += f"\n\nVideo: {x_link(p['id'])}"
-                found.append({"id": str(p["id"]), "text": txt, "images": images,
+                found.append({"id": str(p["id"]), "text": txt, "images": images, "links": links,
                               "parent": parent, "reply_user": p.get("in_reply_to_user_id"),
                               "repost": any(r.get("type") == "retweeted" for r in refs),
                               "quote": any(r.get("type") == "quoted" for r in refs)})
@@ -205,7 +208,25 @@ class Bluesky:
                 image_alts=[p["alt"] for p in photos],
                 reply_to=reply, facets=facets)
         else:
-            sent = self.client.send_post(text=text, reply_to=reply, facets=facets)
+            # Link cards are best-effort, never replace the original post text.
+            from link_preview import preview_for
+            embed = None
+            for url in post.get("links", []):
+                card = preview_for(url)
+                if card is None:
+                    continue
+                thumb = None
+                if card["thumbnail"]:
+                    try:
+                        thumb = self.client.upload_blob(card["thumbnail"]).blob
+                    except Exception as error:
+                        LOG.warning("Bluesky link thumbnail upload failed (%s); posting card without image", type(error).__name__)
+                external = models.AppBskyEmbedExternal.External(
+                    uri=card["uri"], title=card["title"],
+                    description=card["description"], thumb=thumb)
+                embed = models.AppBskyEmbedExternal.Main(external=external)
+                break
+            sent = self.client.send_post(text=text, reply_to=reply, facets=facets, embed=embed)
         return {"uri": sent.uri, "cid": sent.cid,
                 "root": root or {"uri": sent.uri, "cid": sent.cid}}
 
