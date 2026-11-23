@@ -38,6 +38,8 @@ def summarize(post):
                 "thumbnail_present": bool(card["thumbnail"]),
                 "thumbnail_bytes": len(card["thumbnail"] or b""),
                 "result": ("fallback_only" if card["title"] == domain and not card["description"] and not card["thumbnail"] else "metadata_found"),
+                "source": card.get("source", "unknown"),
+                "diagnostics": card.get("diagnostics", []),
             }
         else:
             report["preview"] = {"result": "unsafe_or_unsupported_url"}
